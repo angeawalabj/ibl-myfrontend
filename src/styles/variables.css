@@ -1,0 +1,7 @@
+/* src/styles/variables.css */
+:root {
+  --color-primary: #2563eb;     /* Bleu principal */
+  --color-bg: #ffffff;          /* Fond clair */
+  --color-text: #1f2937;        /* Gris très foncé */
+  --color-border: #e5e7eb;      /* Gris clair */
+}

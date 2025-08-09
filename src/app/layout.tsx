@@ -1,9 +1,11 @@
 import type { Metadata } from 'next';
 import { Inter } from 'next/font/google';
 import './globals.css';
-import { Header } from '@/components/layout/Header';
-import { Footer } from '@/components/layout/Footer';
+import Header  from '@/components/layout/Header';
+import  Footer  from '@/components/layout/Footer';
+import MobileBottomBar from '@/components/layout/MobileBottomBar';
 import { AuthProvider } from '@/hooks/useAuth';
+import { NotificationsProvider } from "@/context/NotificationsContext";
 
 const inter = Inter({ subsets: ['latin'] });
 
@@ -16,11 +18,14 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en">
       <body className={inter.className}>
-        <AuthProvider>
-          <Header />
-          <main className="min-h-screen">{children}</main>
-          <Footer />
-        </AuthProvider>
+        <Header />
+       {/* <AuthContext.Provider value={{ user, login, logout, register }}>
+          
+          <main className="min-h-screen">*/} {children}{/*</main>
+          
+        </AuthProvider>*/}
+        <Footer />
+        <MobileBottomBar />
       </body>
     </html>
   );

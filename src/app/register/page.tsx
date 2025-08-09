@@ -1,14 +1,198 @@
+"use client"
 
-'use client';
-import { RegisterForm } from '@/components/auth/RegisterForm';
+import { useRouter, useSearchParams } from "next/navigation"
+import { useState, useEffect } from "react"
 
-export default function RegisterPage() {
+type PaymentMethod = "paypal" | "mobile_money" | "credit_card"
+
+const paymentMethodFields: Record<
+  PaymentMethod,
+  { label: string; placeholder: string; type?: string }[]
+> = {
+  paypal: [{ label: "Email PayPal", placeholder: "exemple@paypal.com", type: "email" }],
+  mobile_money: [{ label: "Numéro Mobile Money", placeholder: "229 99 999 999" }],
+  credit_card: [
+    { label: "Numéro de carte", placeholder: "1234 5678 9012 3456", type: "text" },
+    { label: "Date d'expiration", placeholder: "MM/AA", type: "text" },
+    { label: "CVV", placeholder: "123", type: "password" },
+  ],
+}
+
+// Taux de change fictifs à adapter si tu veux une API réelle
+const currencyRates: Record<string, number> = {
+  XOF: 1,
+  USD: 0.0017,
+  EUR: 0.0015,
+}
+
+export default function PaiementPage() {
+  const router = useRouter()
+  const searchParams = useSearchParams()
+  const redirect_url = searchParams.get("redirect_url") || ""
+
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("paypal")
+  const [formValues, setFormValues] = useState<Record<string, string>>({})
+  const [currency, setCurrency] = useState<string>("XOF")
+
+  const fixedAmountXOF = 5000
+  const [convertedAmount, setConvertedAmount] = useState<number>(fixedAmountXOF)
+
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  // Mise à jour des champs dynamiques
+  useEffect(() => {
+    const fields = paymentMethodFields[paymentMethod]
+    const initVals: Record<string, string> = {}
+    fields.forEach(({ label }) => (initVals[label] = ""))
+    setFormValues(initVals)
+  }, [paymentMethod])
+
+  // Conversion automatique du montant
+  useEffect(() => {
+    const rate = currencyRates[currency] || 1
+    setConvertedAmount(Math.round(fixedAmountXOF * rate))
+  }, [currency])
+
+  const handleChange = (label: string, value: string) => {
+    setFormValues((prev) => ({ ...prev, [label]: value }))
+  }
+
+  const validateForm = (): boolean => {
+    const fields = paymentMethodFields[paymentMethod]
+    for (const { label } of fields) {
+      if (!formValues[label] || formValues[label].trim() === "") {
+        setError(`Le champ "${label}" est requis.`)
+        return false
+      }
+    }
+    if (!redirect_url) {
+      setError("Le paramètre redirect_url est manquant.")
+      return false
+    }
+    setError(null)
+    return true
+  }
+
+  const handleSubmit = async () => {
+    if (!validateForm()) return
+    setLoading(true)
+    try {
+      const payload = {
+        payment_method: paymentMethod,
+        payment_contact: formValues[paymentMethodFields[paymentMethod][0].label],
+        amount: convertedAmount,
+        currency,
+      }
+
+      const res = await fetch("/api/payements/simulate-payment/", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      })
+
+      if (!res.ok) {
+        const err = await res.json()
+        throw new Error(err.message || "Erreur lors de la simulation")
+      }
+
+      const data = await res.json()
+      const paymentId = data.data.payment_id
+      const status = data.data.status
+
+      const url = new URL(redirect_url)
+      url.searchParams.set("payment_id", paymentId)
+      url.searchParams.set("status", status)
+
+      window.location.href = url.toString()
+    } catch (err: any) {
+      setError(err.message || "Erreur inconnue")
+      setLoading(false)
+    }
+  }
+
   return (
-    <div className="container mx-auto py-8 flex justify-center">
-      <div className="w-full max-w-md">
-        <h1 className="text-3xl font-bold mb-6 text-center">Register</h1>
-        <RegisterForm />
+    <main className="min-h-screen flex flex-col items-center justify-center p-4 bg-gradient-to-br from-blue-50 to-indigo-100">
+      <div className="w-full max-w-md bg-white rounded-lg shadow-lg p-6 sm:p-10 animate-fadeIn">
+        <h1 className="text-2xl font-semibold mb-6 text-center text-indigo-700">Simuler un paiement</h1>
+
+        {/* Montant fixe */}
+        <div className="mb-4">
+          <label className="block font-medium mb-1">Montant</label>
+          <input
+            type="text"
+            value={`${convertedAmount} ${currency}`}
+            disabled
+            className="w-full bg-gray-100 border border-gray-300 rounded px-3 py-2 text-gray-700"
+          />
+        </div>
+
+        {/* Choix devise */}
+        <div className="mb-6">
+          <label className="block font-medium mb-1">Devise</label>
+          <select
+            value={currency}
+            onChange={(e) => setCurrency(e.target.value)}
+            className="w-full border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+          >
+            <option value="XOF">XOF</option>
+            <option value="USD">USD</option>
+            <option value="EUR">EUR</option>
+          </select>
+        </div>
+
+        {/* Méthode de paiement */}
+        <div className="mb-6">
+          <label className="block font-medium mb-2">Méthode de paiement</label>
+          <div className="flex gap-4">
+            {(["paypal", "mobile_money", "credit_card"] as PaymentMethod[]).map((method) => (
+              <button
+                key={method}
+                type="button"
+                onClick={() => setPaymentMethod(method)}
+                className={`flex-1 py-2 rounded-lg font-semibold transition-colors duration-300
+                  ${
+                    paymentMethod === method
+                      ? "bg-indigo-600 text-white shadow-md"
+                      : "bg-gray-100 text-gray-700 hover:bg-indigo-200"
+                  }`}
+              >
+                {method === "paypal"
+                  ? "PayPal"
+                  : method === "mobile_money"
+                  ? "Mobile Money"
+                  : "Carte bancaire"}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Champs selon méthode */}
+        <div className="mb-6 space-y-4">
+          {paymentMethodFields[paymentMethod].map(({ label, placeholder, type }, idx) => (
+            <div key={idx}>
+              <label className="block font-medium mb-1">{label}</label>
+              <input
+                type={type || "text"}
+                placeholder={placeholder}
+                value={formValues[label] || ""}
+                onChange={(e) => handleChange(label, e.target.value)}
+                className="w-full border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              />
+            </div>
+          ))}
+        </div>
+
+        {error && <p className="mb-4 text-red-600 font-semibold">{error}</p>}
+
+        <button
+          onClick={handleSubmit}
+          disabled={loading}
+          className="w-full py-3 bg-indigo-600 text-white rounded-lg font-bold hover:bg-indigo-700 transition-colors disabled:opacity-50"
+        >
+          {loading ? "Traitement..." : "Payer maintenant"}
+        </button>
       </div>
-    </div>
-  );
+    </main>
+  )
 }
