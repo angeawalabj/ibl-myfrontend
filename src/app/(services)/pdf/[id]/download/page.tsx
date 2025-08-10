@@ -2,9 +2,9 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { usePdfApi } from "@/app/pdf/hooks/usePdfApi";
-import Loading from "@/app/pdf/components/Loading";
-import ErrorMessage from "@/app/pdf/components/ErrorMessage";
+import { usePdfApi } from "../../hooks/usePdfApi";
+import Loading from "../../components/Loading";
+import ErrorMessage from "../../components/ErrorMessage";
 
 interface DownloadPageProps {
   params: { id: string };
