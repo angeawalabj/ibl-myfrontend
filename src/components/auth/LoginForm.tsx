@@ -1,52 +1,69 @@
-'use client';
-import { useState } from 'react';
-//import { useAuth } from '@/hooks/useAuth';
-import { Button } from '@/components/common/Button';
-import { useRouter } from 'next/navigation';
+"use client";
 
-export const LoginForm = () => {
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [error, setError] = useState('');
-  //const { login } = useAuth();
-  const router = useRouter();
+import { useState } from "react";
+import { useForm } from "react-hook-form";
+import { useAuth } from "@/hooks/useAuth";
+import { Button } from "@/components/common/Button";
+import ActivationNotice from "./ActivationNotice";
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+interface LoginFormInputs {
+  email: string;
+  password: string;
+}
+
+export default function LoginForm() {
+  const { register, handleSubmit } = useForm<LoginFormInputs>();
+  const { login, loading, error, accountNotActivated } = useAuth();
+  const [serverError, setServerError] = useState<string | null>(null);
+
+  const onSubmit = async (data: LoginFormInputs) => {
+    setServerError(null);
     try {
-     // await login({ email, password });
-      router.push('/');
-    } catch (err) {
-      setError('Invalid credentials. Please try again.');
+      await login(data.email, data.password);
+    } catch (e: any) {
+      setServerError(e.message);
     }
   };
 
   return (
-    <form onSubmit={handleSubmit} className="bg-white shadow-md rounded-lg p-6">
-      {error && <p className="text-red-500 mb-4">{error}</p>}
-      <div className="mb-4">
-        <label htmlFor="email" className="block text-sm font-medium text-gray-700">Email</label>
+    <form onSubmit={handleSubmit(onSubmit)} className="max-w-md mx-auto space-y-6 p-4">
+      <div>
+        <label htmlFor="email" className="block font-medium mb-1">
+          Email
+        </label>
         <input
-          type="email"
           id="email"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          className="mt-1 p-2 w-full border rounded-md focus:ring-primary-color"
-          required
+          type="email"
+          {...register("email", { required: "Email requis" })}
+          className="w-full border border-gray-300 rounded px-3 py-2"
         />
       </div>
-      <div className="mb-4">
-        <label htmlFor="password" className="block text-sm font-medium text-gray-700">Password</label>
+
+      <div>
+        <label htmlFor="password" className="block font-medium mb-1">
+          Mot de passe
+        </label>
         <input
-          type="password"
           id="password"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          className="mt-1 p-2 w-full border rounded-md focus:ring-primary-color"
-          required
+          type="password"
+          {...register("password", { required: "Mot de passe requis" })}
+          className="w-full border border-gray-300 rounded px-3 py-2"
         />
       </div>
-      <Button type="submit" variant="primary" className="w-full">Login</Button>
+
+      {error && <p className="text-red-600">{error}</p>}
+      {serverError && <p className="text-red-600">{serverError}</p>}
+
+      {accountNotActivated && (
+        <p className="text-yellow-700">
+          Votre compte n’est pas encore activé. Vérifiez vos emails ou{" "}
+          <ActivationNotice />
+        </p>
+      )}
+
+      <Button type="submit" variant="primary" disabled={loading}>
+        {loading ? "Connexion..." : "Se connecter"}
+      </Button>
     </form>
   );
-};
+}

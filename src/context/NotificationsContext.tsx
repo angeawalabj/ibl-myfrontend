@@ -2,7 +2,7 @@
 "use client";
 
 import React, { createContext, useContext, useState, useEffect } from "react";
-import api from "@/services/api"; // axios instance configurée
+import api from "@/lib/api"; // axios instance configurée
 
 interface NotificationsContextType {
   unreadCount: number;

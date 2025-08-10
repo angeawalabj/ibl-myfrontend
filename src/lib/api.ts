@@ -1,63 +1,66 @@
-// services/api.ts
-import axios, { AxiosInstance, AxiosError } from "axios";
-import { toast } from "react-hot-toast"; // Optionnel: pour afficher des erreurs utilisateurs
+// src/lib/api.ts
+import axios from "axios";
+import { useAuthStore } from "@/store/authStore";
 
-const api: AxiosInstance = axios.create({
-  baseURL: process.env.NEXT_PUBLIC_API_BASE_URL || "/api",
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api";
+
+const api = axios.create({
+  baseURL: API_BASE_URL,
   headers: {
     "Content-Type": "application/json",
   },
-  timeout: 15000, // 15s timeout
+  withCredentials: true, // pour cookies si besoin
 });
 
-// Intercepteur pour ajouter token auth (ex: JWT stocké en localStorage ou cookie)
+// Setup interceptor pour injecter le token dans chaque requête
 api.interceptors.request.use(
   (config) => {
-    // Exemple récupération token dans localStorage (adapter selon ta gestion auth)
-    if (typeof window !== "undefined") {
-      const token = localStorage.getItem("token");
-      if (token && config.headers) {
-        config.headers.Authorization = `Bearer ${token}`;
-      }
+    const accessToken = useAuthStore.getState().accessToken;
+    if (accessToken && config.headers) {
+      config.headers.Authorization = `Bearer ${accessToken}`;
     }
     return config;
   },
   (error) => Promise.reject(error)
 );
+
+// Interceptor réponse pour gérer erreurs globales et refresh token
 api.interceptors.response.use(
   (response) => response,
-  (error: AxiosError) => {
-    if (error.response) {
-      const status = error.response.status;
+  async (error) => {
+    const originalRequest = error.config;
+    const authStore = useAuthStore.getState();
 
-      // On crée un type pour data (partiel)
-      type ErrorResponseData = {
-        detail?: string;
-      };
+    if (
+      error.response?.status === 401 &&
+      !originalRequest._retry &&
+      authStore.refreshToken
+    ) {
+      originalRequest._retry = true;
+      try {
+        // Appel refresh token
+        const res = await axios.post(
+          `${API_BASE_URL}/users/token/refresh/`,
+          { refresh: authStore.refreshToken }
+        );
+        const { access, refresh } = res.data;
 
-      const data = error.response.data as ErrorResponseData;
+        // Met à jour le store
+        authStore.setTokens(access, refresh);
 
-      // Gestion d'erreurs communes
-      if (status === 401) {
-        toast.error("Session expirée, veuillez vous reconnecter.");
-      } else if (status === 403) {
-        toast.error("Accès refusé.");
-      } else if (status >= 500) {
-        toast.error("Erreur serveur, veuillez réessayer plus tard.");
-      } else if (data.detail) {
-        toast.error(data.detail);
-      } else {
-        toast.error("Une erreur inconnue est survenue.");
+        // Modifie le header de la requête originale et relance
+        originalRequest.headers.Authorization = `Bearer ${access}`;
+        return api(originalRequest);
+      } catch (refreshError) {
+        // Refresh échoué = logout
+        authStore.logout();
+        window.location.href = "/login";
+        return Promise.reject(refreshError);
       }
-    } else if (error.request) {
-      toast.error("Impossible de contacter le serveur.");
-    } else {
-      toast.error("Erreur lors de la requête.");
     }
 
     return Promise.reject(error);
   }
 );
-
 
 export default api;

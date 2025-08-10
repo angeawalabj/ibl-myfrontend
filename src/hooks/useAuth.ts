@@ -1,62 +1,117 @@
-"use client";
-
-import React, { createContext, useContext, useState, useEffect, ReactNode } from "react";
+import { useAuthStore } from "@/store/authStore";
 import api from "@/lib/api";
-import { requestNotificationPermission } from "@/lib/firebase";
+import { useRouter } from "next/navigation";
 
-interface AuthContextType {
-  user: any | null;
-  login: (credentials: { email: string; password: string }) => Promise<void>;
-  logout: () => void;
-  register: (data: { email: string; password: string; username: string }) => Promise<void>;
-}
+export function useAuth() {
+  const router = useRouter();
+  const {
+    user,
+    accessToken,
+    refreshToken,
+    loading,
+    error,
+    accountNotActivated,
+    setUser,
+    setTokens,
+    logout,
+    setLoading,
+    setError,
+    setAccountNotActivated,
+  } = useAuthStore();
 
-const AuthContext = createContext<AuthContextType | undefined>(undefined);
+  // Login
+  const login = async (email: string, password: string) => {
+    setLoading(true);
+    setError(null);
+    setAccountNotActivated(false);
 
-export const AuthProvider = ({ children }: { children: ReactNode }) => {
-  const [user, setUser] = useState<any | null>(null);
+    try {
+      const res = await api.post("/users/login/", { email, password });
 
-  useEffect(() => {
-    const token = localStorage.getItem("token");
-    if (token) {
-      api.get("/users/me/").then((response) => setUser(response.data));
-    }
-
-    requestNotificationPermission().then((token) => {
-      if (token) {
-        api.post("/users/register-fcm-token/", { token });
+      if (res.data.detail === "2FA required.") {
+        router.push("/twofa/verify");
+        setLoading(false);
+        return;
       }
-    });
-  }, []);
 
-  const login = async (credentials: { email: string; password: string }) => {
-    const response = await api.post("/users/login/", credentials);
-    localStorage.setItem("token", response.data.token);
-    setUser(response.data.user);
+      if (res.data.detail === "Compte non activé." || res.data.detail === "Le compte est déjà activé.") {
+        setAccountNotActivated(true);
+        setLoading(false);
+        return;
+      }
+
+      // Assuming the backend returns user data and tokens
+      const { access, refresh, user: userData } = res.data;
+      setTokens(access, refresh);
+      setUser({
+        id: userData.id || "unknown", // Provide a fallback if id is missing
+        username: userData.username || email.split("@")[0], // Fallback to email prefix
+        email,
+      });
+      setLoading(false);
+      router.push("/");
+    } catch (e: any) {
+      setError(e.response?.data?.detail || "Erreur lors de la connexion");
+      setLoading(false);
+    }
   };
 
-  const logout = () => {
-    localStorage.removeItem("token");
-    setUser(null);
+  // Logout
+  const doLogout = () => {
+    logout();
+    router.push("/login");
   };
 
-  const register = async (data: { email: string; password: string; username: string }) => {
-    const response = await api.post("/users/register/", data);
-    localStorage.setItem("token", response.data.token);
-    setUser(response.data.user);
+  // Resend activation email
+  const resendActivationEmail = async (email: string) => {
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await api.post("/users/activation/request/", { email });
+      setLoading(false);
+      return res.data.detail;
+    } catch (e: any) {
+      setError(e.response?.data?.detail || "Erreur lors de l'envoi de l'email");
+      setLoading(false);
+      throw e;
+    }
   };
 
-  return (
-    <AuthContext.Provider value={{ user, login, logout, register }}>
-      {children}
-    </AuthContext.Provider>
-  );
-};
+  // Verify 2FA
+  const verifyTwoFA = async (token: string) => {
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await api.post("/users/2fa/verify/", { token });
+      // Assuming the backend returns { access: string, refresh: string, user?: User }
+      const { access, refresh, user: userData } = res.data;
+      setTokens(access, refresh);
+      if (userData) {
+        setUser({
+          id: userData.id || "unknown",
+          username: userData.username || "unknown",
+          email: userData.email || "unknown",
+        });
+      }
+      setLoading(false);
+      router.push("/"); // Redirect to home or another page after successful 2FA
+    } catch (e: any) {
+      setError(e.response?.data?.detail || e.message);
+      setLoading(false);
+      throw e;
+    }
+  };
 
-export const useAuth = (): AuthContextType => {
-  const context = useContext(AuthContext);
-  if (!context) {
-    throw new Error("useAuth must be used within an AuthProvider");
-  }
-  return context;
-};
+  return {
+    user,
+    accessToken,
+    refreshToken,
+    loading,
+    error,
+    accountNotActivated,
+    login,
+    doLogout,
+    resendActivationEmail,
+    verifyTwoFA,
+  };
+}

@@ -4,8 +4,8 @@ import './globals.css';
 import Header  from '@/components/layout/Header';
 import  Footer  from '@/components/layout/Footer';
 import MobileBottomBar from '@/components/layout/MobileBottomBar';
-import { AuthProvider } from '@/hooks/useAuth';
 import { NotificationsProvider } from "@/context/NotificationsContext";
+import { AuthProvider } from '@/hooks/useAuth';
 
 const inter = Inter({ subsets: ['latin'] });
 
@@ -18,6 +18,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en">
       <body className={inter.className}>
+        <NotificationsProvider>
         <Header />
        {/* <AuthContext.Provider value={{ user, login, logout, register }}>
           
@@ -26,6 +27,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         </AuthProvider>*/}
         <Footer />
         <MobileBottomBar />
+        </NotificationsProvider>
       </body>
     </html>
   );
